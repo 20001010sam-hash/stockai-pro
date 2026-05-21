@@ -7,55 +7,74 @@ module.exports = async (req, res) => {
   try {
     const { type, symbol } = req.query;
 
-    // 台股固定10檔
     if (type === 'tw') {
       const r = await fetch('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw|tse_2317.tw|tse_2454.tw|tse_2382.tw|tse_2308.tw|tse_2412.tw|tse_2881.tw|tse_3008.tw|tse_6669.tw|tse_2376.tw&json=1&delay=0', {
         headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://mis.twse.com.tw' }
       });
-      const d = await r.json();
-      return res.status(200).json(d);
+      return res.status(200).json(await r.json());
     }
 
-    // 加權指數
     if (type === 'twii') {
       const r = await fetch('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0', {
         headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://mis.twse.com.tw' }
       });
-      const d = await r.json();
-      return res.status(200).json(d);
+      return res.status(200).json(await r.json());
     }
 
-    // 搜尋任意台股/ETF
     if (type === 'search' && symbol) {
       const sym = symbol.trim();
-      // 先試 tse（上市），再試 otc（上櫃）
       const urls = [
         `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${sym}.tw&json=1&delay=0`,
         `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_${sym}.tw&json=1&delay=0`,
       ];
       for (const url of urls) {
-        const r = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://mis.twse.com.tw' }
-        });
+        const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://mis.twse.com.tw' } });
         const d = await r.json();
-        if (d.msgArray && d.msgArray.length > 0 && d.msgArray[0].z !== '-') {
+        if (d.msgArray && d.msgArray.length > 0 && d.msgArray[0].c) {
           return res.status(200).json(d);
         }
       }
       return res.status(200).json({ msgArray: [], error: 'not found' });
     }
 
-    // AI 分析 (POST)
+    if (type === 'indices') {
+      const syms = [
+        ['^SPX','sp500'],['^NDX','nasdaq'],['^DJI','dow'],
+        ['^SOX','sox'],['^NKX','nikkei'],['USDTWD=X','usdtwd'],['GC=F','gold']
+      ];
+      const results = {};
+      await Promise.all(syms.map(async ([s, key]) => {
+        try {
+          const r = await fetch(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(s)}?interval=1d&range=1d`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' }
+          });
+          const d = await r.json();
+          const meta = d?.chart?.result?.[0]?.meta;
+          if (meta) {
+            const price = meta.regularMarketPrice || 0;
+            const prev = meta.previousClose || price;
+            results[key] = {
+              price: Math.round(price * 100) / 100,
+              change: Math.round((price - prev) * 100) / 100,
+              pct: prev > 0 ? Math.round((price - prev) / prev * 10000) / 100 : 0
+            };
+          }
+        } catch {}
+      }));
+      return res.status(200).json(results);
+    }
+
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({error:'No API key'});
-      const headers = {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      };
       const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers, body: JSON.stringify(body)
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body)
       });
       const text = await r.text();
       res.setHeader('Content-Type', 'application/json');
