@@ -5,18 +5,27 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const { type, symbols } = req.query;
+    const { type } = req.query;
 
-    if (type === 'quote') {
-      const syms = symbols || 'AAPL,MSFT,NVDA,TSLA,AMZN,GOOG,META,F,NOK,PLUG,2330.TW,2317.TW,2454.TW,2382.TW,2308.TW,2412.TW,2881.TW,3008.TW,6669.TW,2376.TW,%5ETWII,%5EGSPC,%5EIXIC,%5EDJI,SOX,^N225,USDTWD=X,GC=F';
-      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${syms}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,shortName`;
-      const r = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+    // 台股 - 證交所官方API
+    if (type === 'tw') {
+      const r = await fetch('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw|tse_2317.tw|tse_2454.tw|tse_2382.tw|tse_2308.tw|tse_2412.tw|tse_2881.tw|tse_3008.tw|tse_6669.tw|tse_2376.tw&json=1&delay=0', {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://mis.twse.com.tw' }
       });
-      const data = await r.json();
-      return res.status(200).json(data);
+      const d = await r.json();
+      return res.status(200).json(d);
     }
 
+    // 加權指數
+    if (type === 'twii') {
+      const r = await fetch('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0', {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://mis.twse.com.tw' }
+      });
+      const d = await r.json();
+      return res.status(200).json(d);
+    }
+
+    // AI 分析 (POST)
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({error:'No API key'});
