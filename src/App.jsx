@@ -1,178 +1,1223 @@
-import{useState,useEffect,useRef,useCallback}from"react";
-function getTW(){return new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Taipei"}))}
-function isTWOpen(){const d=getTW(),day=d.getDay(),m=d.getHours()*60+d.getMinutes();return day>=1&&day<=5&&m>=540&&m<=810}
-function isUSOpen(){const d=getTW(),day=d.getDay(),m=d.getHours()*60+d.getMinutes();return day>=1&&day<=5&&(m>=1290||m<=240)}
-function mktSt(){const d=getTW(),day=d.getDay(),m=d.getHours()*60+d.getMinutes();if(day===0||day===6)return{label:"週末休市",color:"#64748b"};if(m>=540&&m<=810)return{label:"🟢 台股交易中",color:"#34d399"};if(m>=1290||m<=240)return{label:"🔵 美股交易中",color:"#60a5fa"};return{label:"休市",color:"#64748b"}}
-function twStr(){return getTW().toLocaleString("zh-TW",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"})}
-const TW0=[{symbol:"2330",name:"台積電",sector:"半導體",pe:28.4,eps:32.93,revenue:"2.16兆",grossMargin:"53%",cashFlow:"9420億"},{symbol:"2317",name:"鴻海",sector:"電子",pe:12.1,eps:15.02,revenue:"6.16兆",grossMargin:"6.2%",cashFlow:"1210億"},{symbol:"2454",name:"聯發科",sector:"IC設計",pe:22.8,eps:51.93,revenue:"5028億",grossMargin:"47%",cashFlow:"780億"},{symbol:"2382",name:"廣達",sector:"伺服器",pe:18.5,eps:17.03,revenue:"1.58兆",grossMargin:"5.8%",cashFlow:"420億"},{symbol:"2308",name:"台達電",sector:"電源",pe:30.1,eps:11.80,revenue:"4021億",grossMargin:"28%",cashFlow:"280億"},{symbol:"2412",name:"中華電",sector:"電信",pe:24.3,eps:5.27,revenue:"2201億",grossMargin:"58%",cashFlow:"310億"},{symbol:"2881",name:"富邦金",sector:"金融",pe:11.2,eps:8.26,revenue:"3420億",grossMargin:"35%",cashFlow:"580億"},{symbol:"3008",name:"大立光",sector:"光學",pe:38.7,eps:56.33,revenue:"212億",grossMargin:"69%",cashFlow:"95億"},{symbol:"6669",name:"緯穎",sector:"伺服器",pe:25.3,eps:62.45,revenue:"1890億",grossMargin:"5.3%",cashFlow:"68億"},{symbol:"2376",name:"技嘉",sector:"主機板",pe:14.8,eps:13.38,revenue:"1210億",grossMargin:"10%",cashFlow:"42億"}].map(s=>({...s,price:0,change:0,pct:0,url:`https://tw.stock.yahoo.com/quote/${s.symbol}.TW`}));
-const US0=[{symbol:"AAPL",name:"Apple",sector:"科技",pe:29.4,eps:6.44,revenue:"3855億",grossMargin:"46%",cashFlow:"1132億"},{symbol:"MSFT",name:"Microsoft",sector:"科技",pe:35.1,eps:11.84,revenue:"2452億",grossMargin:"70%",cashFlow:"875億"},{symbol:"NVDA",name:"NVIDIA",sector:"半導體",pe:68.2,eps:12.83,revenue:"609億",grossMargin:"75%",cashFlow:"419億"},{symbol:"TSLA",name:"Tesla",sector:"電動車",pe:52.3,eps:4.74,revenue:"974億",grossMargin:"18%",cashFlow:"44億"},{symbol:"AMZN",name:"Amazon",sector:"電商",pe:41.7,eps:4.39,revenue:"5910億",grossMargin:"48%",cashFlow:"359億"},{symbol:"GOOG",name:"Alphabet",sector:"科技",pe:23.8,eps:7.20,revenue:"3077億",grossMargin:"57%",cashFlow:"710億"},{symbol:"META",name:"Meta",sector:"社交",pe:26.9,eps:18.68,revenue:"1345億",grossMargin:"81%",cashFlow:"434億"},{symbol:"F",name:"Ford",sector:"汽車",pe:11.2,eps:1.21,revenue:"1850億",grossMargin:"8%",cashFlow:"70億"},{symbol:"NOK",name:"Nokia",sector:"電信",pe:18.3,eps:0.80,revenue:"220億",grossMargin:"38%",cashFlow:"28億"},{symbol:"PLUG",name:"Plug Power",sector:"能源",pe:-1,eps:-0.82,revenue:"9億",grossMargin:"-45%",cashFlow:"-8億"}].map(s=>({...s,price:0,change:0,pct:0,url:`https://tw.stock.yahoo.com/quote/${s.symbol}`}));
-const DIMS=[{key:"sentiment",label:"市場情緒",icon:"😱"},{key:"macro",label:"大盤趨勢",icon:"📊"},{key:"fundamental",label:"基本面",icon:"🏢"},{key:"valuation",label:"估值",icon:"💰"},{key:"chips",label:"籌碼面",icon:"🎯"},{key:"technical",label:"技術面",icon:"📈"},{key:"risk",label:"風險",icon:"🛡️"},{key:"strategy",label:"策略",icon:"🧭"}];
-const PORT=[{symbol:"AAPL",shares:50,cost:165.20,tw:false},{symbol:"NVDA",shares:20,cost:620.00,tw:false},{symbol:"2330",shares:10,cost:820.00,tw:true},{symbol:"2454",shares:5,cost:1050.00,tw:true}];
-async function fetchData(){
-  const now=twStr();
-  const [twRes,twiiRes,indRes,usRes]=await Promise.all([
-    fetch("/api/proxy?type=tw"),fetch("/api/proxy?type=twii"),
-    fetch("/api/proxy?type=indices").catch(()=>null),
-    fetch("/api/proxy?type=us_batch").catch(()=>null)
-  ]);
-  const twData=await twRes.json();
-  const twArr=(twData.msgArray||[]).map(q=>{
-    const price=parseFloat(q.z)||parseFloat(q.y)||0;const open=parseFloat(q.o)||price;
-    const change=price>0&&open>0?Math.round((price-open)*100)/100:0;
-    const pct=open>0?Math.round((price-open)/open*10000)/100:0;
-    return{symbol:q.c,name:q.n||q.c,price,change,pct};
+import { useState, useEffect, useRef, useCallback } from "react";
+
+function getTW() {
+  return new Date(
+    new Date().toLocaleString("en-US", {
+      timeZone: "Asia/Taipei",
+    })
+  );
+}
+
+function twStr() {
+  return getTW().toLocaleString("zh-TW", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
-  let twii={price:0,change:0,pct:0};
-  try{const id=await twiiRes.json();const iq=(id.msgArray||[])[0];
-    if(iq){const p=parseFloat(iq.z)||parseFloat(iq.y)||0;const o=parseFloat(iq.o)||p;
-      twii={price:Math.round(p),change:Math.round((p-o)*100)/100,pct:o>0?Math.round((p-o)/o*10000)/100:0};}}catch{}
-  let indices={twii,sp500:{price:0,change:0,pct:0},nasdaq:{price:0,change:0,pct:0},dow:{price:0,change:0,pct:0},sox:{price:0,change:0,pct:0},nikkei:{price:0,change:0,pct:0},usdtwd:{price:0,change:0,pct:0},gold:{price:0,change:0,pct:0}};
-  try{if(indRes){const id=await indRes.json();indices={...indices,...id,twii};}}catch{}
-  let usArr=US0.map(s=>({symbol:s.symbol,price:0,change:0,pct:0}));
-  try{if(usRes){const ud=await usRes.json();usArr=US0.map(s=>{const f=ud[s.symbol];return f?{symbol:s.symbol,price:f.price,change:f.change,pct:f.pct}:{symbol:s.symbol,price:0,change:0,pct:0}});}}catch{}
-  return{fetchTime:now,indices,tw:twArr,us:usArr};
 }
-async function searchStock(symbol,isUS=false){
-  if(isUS){const r=await fetch(`/api/proxy?type=us&symbol=${encodeURIComponent(symbol)}`);const d=await r.json();if(!d.c)return null;return{symbol:symbol.toUpperCase(),name:symbol.toUpperCase(),price:Math.round(d.c*100)/100,change:Math.round((d.d||0)*100)/100,pct:Math.round((d.dp||0)*100)/100,sector:"美股",pe:0,eps:0,revenue:"—",grossMargin:"—",cashFlow:"—",url:`https://tw.stock.yahoo.com/quote/${symbol}`};}
-  const r=await fetch(`/api/proxy?type=search&symbol=${encodeURIComponent(symbol)}`);const d=await r.json();const q=(d.msgArray||[])[0];if(!q)return null;
-  const price=parseFloat(q.z)||parseFloat(q.y)||0;const open=parseFloat(q.o)||price;
-  const change=price>0&&open>0?Math.round((price-open)*100)/100:0;const pct=open>0?Math.round((price-open)/open*10000)/100:0;
-  return{symbol:q.c,name:q.n||q.c,price,change,pct,sector:"台股",pe:0,eps:0,revenue:"—",grossMargin:"—",cashFlow:"—",url:`https://tw.stock.yahoo.com/quote/${q.c}.TW`};
+
+function isTWOpen() {
+  const d = getTW();
+  const day = d.getDay();
+  const m = d.getHours() * 60 + d.getMinutes();
+  return day >= 1 && day <= 5 && m >= 540 && m <= 810;
 }
-async function fetchTWSentiment(twiiPct,usdtwdPct,stocks){
-  const stockSummary=stocks.filter(s=>s.price>0).map(s=>`${s.name}${s.pct>=0?"+":""}${s.pct.toFixed(2)}%`).join("、")||"台股資料載入中";
-  const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:600,messages:[{role:"user",content:`台灣股市情緒分析：加權指數${twiiPct>=0?"上漲":"下跌"}${Math.abs(twiiPct).toFixed(2)}%，台幣${usdtwdPct<=0?"升值":"貶值"}${Math.abs(usdtwdPct).toFixed(3)}%。個股：${stockSummary}。請用繁體中文分析台股今日情緒，只回傳JSON：{"score":數字0到100,"label":"極度恐懼或恐懼或中性或貪婪或極度貪婪","observations":["觀察1約20字","觀察2約20字","觀察3約20字"],"summary":"30字內總結"}`}]})});
-  const d=await r.json();const txt=d.content?.[0]?.text||"{}";
-  const m=txt.match(/\{[\s\S]*\}/);if(!m)return null;
-  return JSON.parse(m[0]);
+
+function isUSOpen() {
+  const d = getTW();
+  const day = d.getDay();
+  const m = d.getHours() * 60 + d.getMinutes();
+  return day >= 1 && day <= 5 && (m >= 1290 || m <= 240);
 }
-function StarBg(){const ref=useRef(null);useEffect(()=>{const c=ref.current;if(!c)return;const ctx=c.getContext("2d");let raf,t=0;const resize=()=>{c.width=window.innerWidth;c.height=window.innerHeight};resize();window.addEventListener("resize",resize);const stars=Array.from({length:200},()=>({x:Math.random(),y:Math.random(),r:Math.random()*1.2+0.2,ph:Math.random()*Math.PI*2,sp:Math.random()*0.004+0.001}));const draw=()=>{t+=0.007;ctx.clearRect(0,0,c.width,c.height);const bg=ctx.createLinearGradient(0,0,c.width,c.height);bg.addColorStop(0,"#02040e");bg.addColorStop(1,"#010308");ctx.fillStyle=bg;ctx.fillRect(0,0,c.width,c.height);[[0.15,0.2,0.5,"rgba(16,60,140,0.07)"],[0.8,0.7,0.45,"rgba(80,20,130,0.06)"],[0.5,0.9,0.4,"rgba(0,100,80,0.05)"]].forEach(([bx,by,br,col])=>{const g=ctx.createRadialGradient(bx*c.width,by*c.height,0,bx*c.width,by*c.height,br*c.width);g.addColorStop(0,col);g.addColorStop(1,"transparent");ctx.fillStyle=g;ctx.fillRect(0,0,c.width,c.height);});ctx.strokeStyle="rgba(0,180,120,0.02)";ctx.lineWidth=1;for(let i=0;i<c.width;i+=80){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,c.height);ctx.stroke()}for(let i=0;i<c.height;i+=80){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(c.width,i);ctx.stroke()}stars.forEach(s=>{s.ph+=s.sp;const a=0.3+0.7*((Math.sin(s.ph)+1)/2);const g=ctx.createRadialGradient(s.x*c.width,s.y*c.height,0,s.x*c.width,s.y*c.height,s.r*2.5);g.addColorStop(0,`rgba(210,235,255,${a})`);g.addColorStop(1,"transparent");ctx.fillStyle=g;ctx.beginPath();ctx.arc(s.x*c.width,s.y*c.height,s.r*2.5,0,Math.PI*2);ctx.fill()});const sy=((Math.sin(t*0.25)+1)/2)*c.height;const sg=ctx.createLinearGradient(0,sy-50,0,sy+50);sg.addColorStop(0,"transparent");sg.addColorStop(0.5,"rgba(52,211,153,0.018)");sg.addColorStop(1,"transparent");ctx.fillStyle=sg;ctx.fillRect(0,sy-50,c.width,100);raf=requestAnimationFrame(draw);};draw();return()=>{cancelAnimationFrame(raf);window.removeEventListener("resize",resize)};},[]);return <canvas ref={ref} style={{position:"fixed",inset:0,zIndex:0,pointerEvents:"none"}}/>;}
-function Spark({pos}){const pts=useRef(()=>{let y=50,a=[];for(let i=0;i<20;i++){y+=(Math.random()-(pos?0.38:0.62))*9;y=Math.max(8,Math.min(92,y));a.push(`${i*5.26},${y}`)}return a.join(" ")}).current;const c=pos?"#34d399":"#f87171";return <svg width="70" height="26" viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id={`sg${pos?1:0}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={c} stopOpacity="0.35"/><stop offset="100%" stopColor={c} stopOpacity="0"/></linearGradient></defs><polygon points={`0,100 ${pts} 100,100`} fill={`url(#sg${pos?1:0})`}/><polyline points={pts} fill="none" stroke={c} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;}
-function Ticker({tw,us,news,loading}){const ref=useRef(null),anim=useRef(null),pos=useRef(0);const [pause,setPause]=useState(false);const alerts=[...tw.filter(s=>s.price>0&&Math.abs(s.pct)>=10).map(s=>({alert:true,up:s.pct>0,txt:`🇹🇼 ${s.symbol} ${s.name} ${s.pct>0?"▲":"▼"}${Math.abs(s.pct).toFixed(2)}%`,sub:`NT$${s.price}`})),...us.filter(s=>s.price>0&&Math.abs(s.pct)>=10).map(s=>({alert:true,up:s.pct>0,txt:`🇺🇸 ${s.symbol} ${s.pct>0?"▲":"▼"}${Math.abs(s.pct).toFixed(2)}%`,sub:`$${s.price}`}))];const items=[...alerts,...news.slice(0,8).map(n=>({alert:false,txt:n.title,tag:n.tag,impact:n.impact}))];useEffect(()=>{if(pause||!items.length)return;const el=ref.current;if(!el)return;const step=()=>{pos.current-=0.5;if(Math.abs(pos.current)>=el.scrollWidth/2)pos.current=0;el.style.transform=`translateX(${pos.current}px)`;anim.current=requestAnimationFrame(step)};anim.current=requestAnimationFrame(step);return()=>cancelAnimationFrame(anim.current)},[pause,items.length]);const ha=alerts.length>0;if(loading&&!items.length)return <div style={{height:38,background:"rgba(2,8,20,0.9)",borderBottom:"1px solid rgba(52,211,153,0.15)",display:"flex",alignItems:"center",paddingLeft:20,flexShrink:0}}><span style={{fontSize:11,color:"#34d399",animation:"pulse 1.2s infinite"}}>⟳ 抓取最新行情...</span></div>;if(!items.length)return null;const db=[...items,...items];return <div style={{height:38,overflow:"hidden",position:"relative",flexShrink:0,zIndex:49,background:ha?"linear-gradient(90deg,rgba(30,5,5,.95),rgba(15,3,3,.95))":"rgba(2,8,20,.92)",borderBottom:`1px solid ${ha?"rgba(239,68,68,.3)":"rgba(52,211,153,.12)"}`,backdropFilter:"blur(4px)"}}><div style={{position:"absolute",left:0,top:0,bottom:0,zIndex:10,display:"flex",alignItems:"center",padding:"0 14px",minWidth:108,background:ha?"linear-gradient(90deg,rgba(200,30,30,.85) 55%,transparent)":"linear-gradient(90deg,rgba(2,8,20,.98) 55%,transparent)"}}>{ha?<span style={{fontSize:11,fontWeight:800,color:"#fca5a5",animation:"pulse 1s infinite"}}>🚨 異動警示</span>:<span style={{fontSize:11,fontWeight:700,color:"#34d399"}}>{loading?"⟳ 更新中":"📡 即時行情"}</span>}</div><div style={{position:"absolute",right:0,top:0,bottom:0,width:70,zIndex:10,background:"linear-gradient(270deg,rgba(2,8,20,1),transparent)"}}/><button onClick={()=>setPause(p=>!p)} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",zIndex:20,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#4d7a9e",cursor:"pointer",fontSize:10,padding:"2px 7px",borderRadius:4}}>{pause?"▶":"⏸"}</button><div style={{paddingLeft:112,overflow:"hidden",height:"100%",display:"flex",alignItems:"center"}}><div ref={ref} style={{display:"flex",alignItems:"center",whiteSpace:"nowrap",willChange:"transform"}}>{db.map((item,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"0 20px",borderRight:`1px solid ${item.alert?"rgba(239,68,68,.18)":"rgba(30,50,80,.35)"}`}}>{item.alert?<><span style={{fontSize:12,fontWeight:800,color:item.up?"#34d399":"#f87171",textShadow:item.up?"0 0 8px rgba(52,211,153,.6)":"0 0 8px rgba(248,113,113,.6)"}}>{item.txt}</span><span style={{fontSize:11,color:"#4d7a9e"}}>{item.sub}</span></>:<><span style={{fontSize:10,padding:"1px 5px",borderRadius:3,fontWeight:700,background:item.impact==="利多"?"rgba(52,211,153,.15)":"rgba(248,113,113,.15)",color:item.impact==="利多"?"#34d399":"#f87171"}}>{item.impact}</span><span style={{fontSize:12,color:"#6a90b0"}}>{(item.txt||"").slice(0,55)}{(item.txt||"").length>55?"…":""}</span></>}</span>)}</div></div></div>;}
-function AIModal({s,tw,onClose}){const [tab,setTab]=useState("sentiment");const [res,setRes]=useState({});const [loading,setLoading]=useState(false);const cur=tw?"NT$":"$",mkt=tw?"台股":"美股";async function analyze(k){if(res[k])return;setLoading(true);const P={sentiment:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【市場情緒】：VIX偏低，散戶偏多，對該股短期影響，評分1-10。約150字。`,macro:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【大盤總經】：Fed 5.25%、美債4.58%、復甦期${tw?"、台幣升值":""}。約150字。`,fundamental:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【基本面】：PE ${s.pe}、EPS ${s.eps}、毛利${s.grossMargin}、現金流${s.cashFlow}。評分1-10。約150字。`,valuation:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【估值】：PE ${s.pe}、現價${cur}${s.price}，是否過貴？給目標價。約150字。`,chips:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【籌碼面】：${tw?"三大法人、融資融券":"機構持股、外資"}動向。約150字。`,technical:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【技術面】：現價${cur}${s.price}，${s.change>0?"上漲":"下跌"}${Math.abs(s.pct||0).toFixed(2)}%，均線KD MACD支撐壓力。約150字。`,risk:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【風險管理】：部位控制停損設定風險評級。約150字。`,strategy:`針對${mkt} ${s.symbol}（${s.name}）繁體中文分析【投資策略】：適合短線波段長期？進出場條件。約150字。`};try{const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:P[k]}]})});const d=await r.json();setRes(v=>({...v,[k]:d.content?.[0]?.text||"無法取得"}))}catch{setRes(v=>({...v,[k]:"AI 分析暫時無法使用"}))}setLoading(false);}useEffect(()=>{analyze(tab)},[tab]);const dim=DIMS.find(d=>d.key===tab);return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.85)",backdropFilter:"blur(12px)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}><div style={{background:"linear-gradient(135deg,rgba(5,12,28,.98),rgba(8,18,40,.98))",border:"1px solid rgba(52,211,153,.2)",borderRadius:20,width:"100%",maxWidth:720,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 0 60px rgba(52,211,153,.08)"}} onClick={e=>e.stopPropagation()}><div style={{padding:"18px 24px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}><div><div style={{fontSize:19,fontWeight:800,color:"#e8f4f8"}}>{tw?"🇹🇼":"🇺🇸"} {s.symbol} {s.name} 全方位 AI 分析</div><div style={{fontSize:12,color:"#4d7a9e",marginTop:3}}>現價 {cur}{(s.price||0).toLocaleString()} · {(s.pct||0)>=0?"▲":"▼"} {Math.abs(s.pct||0).toFixed(2)}%{s.url&&<a href={s.url} target="_blank" rel="noopener noreferrer" style={{marginLeft:10,color:"#34d399",fontSize:11}}> ↗ Yahoo</a>}</div></div><button onClick={onClose} style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.08)",color:"#6b8fad",cursor:"pointer",fontSize:18,width:36,height:36,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></div><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4,padding:"10px 16px",borderBottom:"1px solid rgba(255,255,255,.06)",flexShrink:0}}>{DIMS.map(d=><button key={d.key} onClick={()=>setTab(d.key)} style={{padding:"6px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:tab===d.key?"rgba(52,211,153,.15)":"rgba(255,255,255,.03)",color:tab===d.key?"#34d399":"#4d7a9e",borderBottom:tab===d.key?"2px solid #34d399":"2px solid transparent"}}><div style={{fontSize:14,marginBottom:1}}>{d.icon}</div>{d.label}{res[d.key]&&<span style={{color:"#34d399",marginLeft:2}}>✓</span>}</button>)}</div><div style={{flex:1,overflow:"auto",padding:"18px 24px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}><span style={{fontSize:18}}>{dim.icon}</span><span style={{fontSize:15,fontWeight:700,color:"#e8f4f8"}}>{dim.label}</span></div><div style={{background:"rgba(0,0,0,.3)",border:"1px solid rgba(52,211,153,.1)",borderRadius:12,padding:18,fontFamily:"monospace",fontSize:13,lineHeight:1.9,color:"#8ab0cc",minHeight:150}}>{loading&&!res[tab]?<div style={{color:"#34d399"}}>⟳ AI 正在分析 {dim.label}...</div>:<span style={{whiteSpace:"pre-wrap"}}>{res[tab]}</span>}</div><div style={{marginTop:8,fontSize:11,color:"#1a3050",textAlign:"right"}}>⚠ 僅供參考，不構成投資建議</div></div><div style={{padding:"12px 24px",borderTop:"1px solid rgba(255,255,255,.06)",flexShrink:0}}><button onClick={()=>DIMS.forEach(d=>analyze(d.key))} style={{width:"100%",padding:11,borderRadius:10,border:"1px solid rgba(52,211,153,.3)",background:"rgba(52,211,153,.06)",color:"#34d399",cursor:"pointer",fontSize:13,fontWeight:700}}>🚀 一鍵全部 8 項分析</button></div></div></div>;}
-function Row({s,tw,wl,onW,onA,onRemove}){const pos=s.pct>=0,big=Math.abs(s.pct)>=10,ok=s.price>0,cur=tw?"NT$":"$";return <div className="row" style={{display:"grid",gridTemplateColumns:"2fr 1.2fr .9fr .9fr .7fr .7fr 70px 110px",gap:8,padding:"11px 16px",borderBottom:"1px solid rgba(255,255,255,.03)",alignItems:"center",background:big&&ok?(pos?"rgba(52,211,153,.04)":"rgba(248,113,113,.04)"):"transparent",borderLeft:big&&ok?`3px solid ${pos?"#34d399":"#f87171"}`:"3px solid transparent"}}><div><div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>{s.url?<a href={s.url} target="_blank" rel="noopener noreferrer" style={{fontWeight:800,color:"#ddeeff",fontSize:13,textDecoration:"none"}}>{s.symbol} <span style={{fontSize:10,opacity:.5}}>↗</span></a>:<span style={{fontWeight:800,color:"#ddeeff",fontSize:13}}>{s.symbol}</span>}{big&&ok&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,fontWeight:800,background:pos?"rgba(52,211,153,.2)":"rgba(248,113,113,.2)",color:pos?"#34d399":"#f87171",animation:"pulse 1.2s infinite"}}>{pos?"🚀急漲":"💥急跌"}</span>}<span style={{fontSize:9,background:"rgba(255,255,255,.05)",padding:"1px 5px",borderRadius:3,color:"#3d5a7a"}}>{s.sector||"台股"}</span><button onClick={()=>onW(s.symbol)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,opacity:wl.includes(s.symbol)?1:.25,padding:0}}>⭐</button>{onRemove&&<button onClick={()=>onRemove(s.symbol)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#f87171",opacity:0.5,padding:0}}>✕</button>}</div><div style={{fontSize:10,color:"#3a5670",marginTop:1}}>{s.name}</div></div><div style={{fontSize:15,fontWeight:800,color:ok?"#e8f4f8":"#1a3050",fontFamily:"monospace"}}>{ok?`${cur}${s.price.toLocaleString()}`:"—"}</div><div style={{color:pos?"#34d399":"#f87171",fontWeight:700,fontSize:13}}>{ok?(pos?"+":"")+s.change:"—"}</div><div style={{color:pos?"#34d399":"#f87171",fontWeight:700,fontSize:13}}>{ok?(pos?"+":"")+s.pct.toFixed(2)+"%":"—"}</div><div style={{color:s.pe>60?"#f87171":s.pe>30?"#fbbf24":"#34d399",fontWeight:600,fontSize:12}}>{s.pe>0?s.pe+"x":"—"}</div><div style={{fontSize:12,color:"#8aaabb"}}>{s.grossMargin||"—"}</div>{ok?<Spark pos={pos}/>:<div style={{width:70,height:26,borderRadius:4,background:"rgba(255,255,255,.02)"}}/>}<button className="ai" onClick={()=>onA(s)} disabled={!ok} style={{opacity:ok?1:.3,cursor:ok?"pointer":"default"}}>🤖 AI</button></div>;}
-export default function App(){
-const [tab,setTab]=useState("market");const [mTab,setMTab]=useState("tw");const [q,setQ]=useState("");const [sel,setSel]=useState(null);const [selTW,setSelTW]=useState(false);const [wl,setWl]=useState(["AAPL","NVDA","2330","2454"]);const [tw,setTW]=useState(TW0);const [us,setUS]=useState(US0);const [ind,setInd]=useState(null);const [ft,setFt]=useState("");const [fetching,setFetching]=useState(false);const [status,setStatus]=useState("等待中");const [news,setNews]=useState([]);const [newsT,setNewsT]=useState(null);const [clock,setClock]=useState(twStr());const [mst,setMst]=useState(mktSt());
-const [searchQ,setSearchQ]=useState("");const [searching,setSearching]=useState(false);const [searchResult,setSearchResult]=useState(null);const [searchErr,setSearchErr]=useState("");const [extraStocks,setExtraStocks]=useState([]);const [searchMode,setSearchMode]=useState("tw");
-const [sentTab,setSentTab]=useState("tw");const [twSent,setTWSent]=useState(null);const [twSentLoading,setTWSentLoading]=useState(false);
-useEffect(()=>{const t=setInterval(()=>{setClock(twStr());setMst(mktSt())},1000);return()=>clearInterval(t)},[]);
-const doFetch=useCallback(async()=>{setFetching(true);setStatus("⟳ 抓取最新行情...");try{const d=await fetchData();if(d.tw)setTW(TW0.map(def=>{const f=d.tw.find(s=>s.symbol===def.symbol);return f&&f.price>0?{...def,...f}:def}));if(d.us)setUS(US0.map(def=>{const f=d.us.find(s=>s.symbol===def.symbol);return f&&f.price>0?{...def,...f}:def}));if(d.indices)setInd(d.indices);setFt(d.fetchTime||twStr());setStatus("✅ 已更新（證交所＋Finnhub）");localStorage.setItem("sai",JSON.stringify({tw:d.tw,us:d.us,indices:d.indices,ft:d.fetchTime}));}catch(e){setStatus("⚠ 更新失敗："+e.message);try{const c=localStorage.getItem("sai");if(c){const p=JSON.parse(c);if(p.tw)setTW(TW0.map(def=>{const f=p.tw.find(s=>s.symbol===def.symbol);return f&&f.price>0?{...def,...f}:def}));if(p.us)setUS(US0.map(def=>{const f=p.us.find(s=>s.symbol===def.symbol);return f&&f.price>0?{...def,...f}:def}));if(p.indices)setInd(p.indices);if(p.ft)setFt(p.ft)}}catch{}}setFetching(false);},[]);
-useEffect(()=>{doFetch();const t1=setInterval(()=>{if(isTWOpen()||isUSOpen())doFetch()},30000);const t2=setInterval(()=>{if(!isTWOpen()&&!isUSOpen())doFetch()},1800000);return()=>{clearInterval(t1);clearInterval(t2)}},[]);
-const loadTWSentiment=useCallback(async()=>{
-  setTWSentLoading(true);
-  try{const result=await fetchTWSentiment(ind?.twii?.pct||0,ind?.usdtwd?.pct||0,tw);if(result)setTWSent(result);}catch(e){console.error(e);}
-  setTWSentLoading(false);
-},[ind,tw]);
-const fetchNews=useCallback(async()=>{try{const today=getTW().toLocaleDateString("zh-TW");const ts=tw.filter(s=>s.price>0).map(s=>`${s.name}${s.symbol} ${s.price}(${s.pct>=0?"+":""}${s.pct.toFixed(2)}%)`).join("、");const us2=us.filter(s=>s.price>0).map(s=>`${s.symbol} $${s.price}(${s.pct>=0?"+":""}${s.pct.toFixed(2)}%)`).join("、");const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1200,messages:[{role:"user",content:`今天${today}根據行情生成10則繁體財經新聞：台股：${ts||"載入中"} 美股：${us2||"載入中"}\n只回傳JSON：[{"title":"...","tag":"...","impact":"利多或利空","source":"..."}]`}]})});const d=await r.json();const txt=d.content?.[0]?.text||"[]";const p=JSON.parse(txt.replace(/```json|```/g,"").trim());setNews(p.map((n,i)=>({...n,id:Date.now()+i,time:`${Math.floor(Math.random()*55+1)}分前`})));setNewsT(new Date());}catch{}},[tw,us]);
-useEffect(()=>{if(tw.some(s=>s.price>0)||us.some(s=>s.price>0))fetchNews()},[tw,us]);
-const doSearch=async()=>{if(!searchQ.trim())return;setSearching(true);setSearchErr("");setSearchResult(null);try{const result=await searchStock(searchQ.trim(),searchMode==="us");if(result&&result.price>0){setSearchResult(result);}else{setSearchErr(`找不到「${searchQ}」，請確認代號是否正確`);}}catch{setSearchErr("查詢失敗，請稍後再試");}setSearching(false);};
-const addToWatch=(s)=>{if(extraStocks.find(x=>x.symbol===s.symbol))return;setExtraStocks(prev=>[s,...prev]);setSearchResult(null);setSearchQ("");};
-const removeExtra=(sym)=>setExtraStocks(prev=>prev.filter(x=>x.symbol!==sym));
-const all=[...tw,...us,...extraStocks];
-const fTW=[...tw,...extraStocks.filter(s=>s.sector!=="美股")].filter(s=>s.symbol.includes(q)||s.name.includes(q));
-const fUS=[...us,...extraStocks.filter(s=>s.sector==="美股")].filter(s=>s.symbol.toUpperCase().includes(q.toUpperCase())||s.name.toLowerCase().includes(q.toLowerCase()));
-const pv=PORT.reduce((s,p)=>{const st=all.find(x=>x.symbol===p.symbol);return s+(st?.price||0)*p.shares},0);
-const pc=PORT.reduce((s,p)=>s+p.cost*p.shares,0);
-const pnl=pv-pc,pp=pc>0?(pnl/pc)*100:0;
-const alerts=all.filter(s=>s.price>0&&Math.abs(s.pct)>=10).length;
-const i=ind||{};
-const C={a:"#34d399",r:"#f87171",g:"#fbbf24",b:"#60a5fa",m:"#3a5670",t:"#bbd4e8"};
-const glass=(e={})=>({background:"rgba(5,14,32,.7)",backdropFilter:"blur(16px)",border:"1px solid rgba(255,255,255,.06)",borderRadius:16,...e});
-const nb=(a)=>({padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:a?"rgba(52,211,153,.12)":"transparent",color:a?C.a:C.m,borderBottom:a?`2px solid ${C.a}`:"2px solid transparent",transition:"all .2s"});
-const fi=(o,dec=2)=>{if(!o||!o.price)return{v:"—",c:"—",pos:true};return{v:o.price.toLocaleString(),c:(o.pct>=0?"+":"")+o.pct.toFixed(dec)+"%",pos:o.pct>=0}};
-const ic=(n,v,c,pos,url)=><a key={n} href={url} target="_blank" rel="noopener noreferrer" style={{...glass({padding:"12px 14px"}),textDecoration:"none",display:"block",borderLeft:`3px solid ${pos?C.a:C.r}`}}><div style={{fontSize:10,color:C.m,marginBottom:3}}>{n}</div><div style={{fontSize:15,fontWeight:800,color:v==="—"?"#1a3050":"#e8f4f8",fontFamily:"monospace"}}>{v}</div><div style={{fontSize:12,color:pos?C.a:C.r,fontWeight:700,marginTop:2}}>{c}</div></a>;
-const sentColor=(s)=>s>=70?"#f87171":s>=55?"#fbbf24":s>=45?"#60a5fa":s>=30?"#34d399":"#a78bfa";
-return <div style={{minHeight:"100vh",color:C.t,fontFamily:"-apple-system,sans-serif",position:"relative",display:"flex",flexDirection:"column"}}>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<style>{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:rgba(52,211,153,.2);border-radius:4px}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}@keyframes blink{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 14px 3px rgba(239,68,68,.35)}}.row:hover{background:rgba(52,211,153,.03)!important}.ai{background:linear-gradient(135deg,rgba(10,61,44,.8),rgba(8,51,86,.8));border:1px solid rgba(52,211,153,.35);color:#34d399;padding:5px 10px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:700;white-space:nowrap}.ai:hover{background:rgba(52,211,153,.12)!important}a{color:inherit}`}</style>
-<StarBg/>
-<header style={{...glass({borderRadius:0}),padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,position:"sticky",top:0,zIndex:50,flexShrink:0,borderBottom:"1px solid rgba(52,211,153,.12)"}}>
-<div style={{fontSize:18,fontWeight:800,color:C.a,textShadow:"0 0 20px rgba(52,211,153,.4)"}}>▲ StockAI Pro</div>
-<nav style={{display:"flex",gap:2}}>{[["market","行情"],["sentiment","情緒"],["portfolio","組合"],["news","新聞"]].map(([k,l])=><button key={k} style={nb(tab===k)} onClick={()=>setTab(k)}>{l}</button>)}</nav>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
-{alerts>0&&<div style={{fontSize:11,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#fca5a5",padding:"3px 10px",borderRadius:20,fontWeight:700,animation:"blink 1.5s infinite"}}>🚨 {alerts}檔異動</div>}
-<div style={{fontSize:11,padding:"3px 10px",borderRadius:20,fontWeight:700,background:`${mst.color}18`,border:`1px solid ${mst.color}40`,color:mst.color}}>{mst.label}</div>
-<button onClick={()=>doFetch()} disabled={fetching} style={{fontSize:11,padding:"3px 10px",borderRadius:8,cursor:"pointer",fontWeight:600,background:"rgba(52,211,153,.07)",border:"1px solid rgba(52,211,153,.2)",color:C.a,opacity:fetching?.5:1}}>{fetching?"⟳":"🔄"} 更新</button>
-<div style={{fontSize:10,color:"#1a3050",fontFamily:"monospace"}}>{clock}</div>
-</div>
-</header>
-<Ticker tw={tw} us={us} news={news} loading={fetching}/>
-<div style={{background:"rgba(2,8,18,.6)",backdropFilter:"blur(8px)",borderBottom:"1px solid rgba(255,255,255,.04)",padding:"3px 24px",fontSize:11,color:"#1e3a50",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-<span style={{color:"rgba(52,211,153,.6)"}}>●</span><span>{status}</span>
-<span style={{marginLeft:"auto"}}>{isTWOpen()||isUSOpen()?"開盤中：每30秒自動更新":"休市：每30分鐘更新"}</span>
-{ft&&<span style={{color:"#0d2540",fontFamily:"monospace"}}>{ft}</span>}
-</div>
-<main style={{flex:1,maxWidth:1180,margin:"0 auto",padding:"22px 20px",width:"100%",animation:"fadeUp .4s ease",position:"relative",zIndex:1}}>
-{tab==="market"&&<div>
-<div style={{marginBottom:14}}><h1 style={{fontSize:26,fontWeight:800,color:"#e8f4f8"}}>全球股市行情</h1><p style={{color:C.m,fontSize:13,marginTop:4}}>台股：<a href="https://mis.twse.com.tw" target="_blank" rel="noopener noreferrer" style={{color:C.a}}>證交所 ↗</a> ｜ 美股：<a href="https://finnhub.io" target="_blank" rel="noopener noreferrer" style={{color:C.b}}>Finnhub ↗</a>　開盤每30秒更新</p></div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
-{(()=>{const tw2=fi(i.twii),sp=fi(i.sp500),nd=fi(i.nasdaq),dj=fi(i.dow),sx=fi(i.sox),nk=fi(i.nikkei),fx=fi(i.usdtwd,3),gd=fi(i.gold);return[["加權指數",tw2.v,tw2.c,tw2.pos,"https://tw.stock.yahoo.com/quote/%5ETWII"],["S&P500",sp.v,sp.c,sp.pos,"https://finance.yahoo.com/quote/%5EGSPC"],["NASDAQ",nd.v,nd.c,nd.pos,"https://finance.yahoo.com/quote/%5EIXIC"],["道瓊",dj.v,dj.c,dj.pos,"https://finance.yahoo.com/quote/%5EDJI"],["費城半導體",sx.v,sx.c,sx.pos,"https://finance.yahoo.com/quote/SOX"],["日經225",nk.v,nk.c,nk.pos,"https://finance.yahoo.com/quote/%5EN225"],["台幣/美元",fx.v,fx.c,!fx.pos,"https://finance.yahoo.com/quote/USDTWD=X"],["黃金",gd.v,gd.c,gd.pos,"https://finance.yahoo.com/quote/GC=F"]].map(([n,v,c,pos,url])=>ic(n,v,c,pos,url))})()}
-</div>
-<div style={{...glass({padding:16}),marginBottom:14}}>
-<div style={{fontSize:13,fontWeight:700,color:"#e8f4f8",marginBottom:10}}>🔍 搜尋股票 / ETF</div>
-<div style={{display:"flex",gap:8,marginBottom:8}}>{["tw","us"].map(m=><button key={m} onClick={()=>setSearchMode(m)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${searchMode===m?"rgba(52,211,153,.4)":"rgba(255,255,255,.1)"}`,background:searchMode===m?"rgba(52,211,153,.1)":"transparent",color:searchMode===m?C.a:C.m,cursor:"pointer",fontSize:12,fontWeight:600}}>{m==="tw"?"🇹🇼 台股/ETF":"🇺🇸 美股"}</button>)}</div>
-<div style={{display:"flex",gap:8}}>
-<input value={searchQ} onChange={e=>setSearchQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} placeholder={searchMode==="tw"?"例：0050、0056、00878、00403A...":"例：AAPL、NVDA、OKLO、SPY..."} style={{flex:1,padding:"10px 14px",borderRadius:9,background:"rgba(0,0,0,.4)",border:"1px solid rgba(52,211,153,.25)",color:"#e8f4f8",fontSize:14,outline:"none",fontFamily:"monospace"}}/>
-<button onClick={doSearch} disabled={searching} style={{padding:"10px 20px",borderRadius:9,border:"1px solid rgba(52,211,153,.4)",background:"rgba(52,211,153,.1)",color:C.a,cursor:"pointer",fontWeight:700,fontSize:13,opacity:searching?.5:1}}>{searching?"⟳":"查詢"}</button>
-</div>
-{searchErr&&<div style={{marginTop:8,fontSize:12,color:C.r}}>{searchErr}</div>}
-{searchResult&&<div style={{marginTop:10,padding:14,background:"rgba(52,211,153,.06)",border:"1px solid rgba(52,211,153,.2)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-<div><span style={{fontWeight:800,color:"#ddeeff",fontSize:14}}>{searchResult.symbol} {searchResult.name}</span><span style={{marginLeft:12,fontSize:15,fontWeight:800,color:"#e8f4f8",fontFamily:"monospace"}}>{searchResult.sector==="美股"?"$":"NT$"}{searchResult.price.toLocaleString()}</span><span style={{marginLeft:8,fontSize:13,color:searchResult.pct>=0?C.a:C.r,fontWeight:700}}>{searchResult.pct>=0?"+":""}{searchResult.pct.toFixed(2)}%</span></div>
-<div style={{display:"flex",gap:8}}>
-<button onClick={()=>{setSel(searchResult);setSelTW(searchResult.sector!=="美股");}} style={{padding:"6px 14px",borderRadius:8,border:"1px solid rgba(52,211,153,.3)",background:"rgba(52,211,153,.08)",color:C.a,cursor:"pointer",fontSize:12,fontWeight:700}}>🤖 AI分析</button>
-<button onClick={()=>addToWatch(searchResult)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid rgba(96,165,250,.3)",background:"rgba(96,165,250,.08)",color:C.b,cursor:"pointer",fontSize:12,fontWeight:700}}>＋ 加入追蹤</button>
-</div>
-</div>}
-</div>
-<div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
-{["tw","us"].map(m=><button key={m} onClick={()=>setMTab(m)} style={{...glass({padding:"7px 16px"}),border:`1px solid ${mTab===m?"rgba(52,211,153,.4)":"rgba(255,255,255,.06)"}`,color:mTab===m?C.a:C.m,background:mTab===m?"rgba(52,211,153,.1)":"rgba(5,14,32,.5)",cursor:"pointer",fontWeight:700,fontSize:13,borderRadius:8}}>{m==="tw"?"🇹🇼 台股":"🇺🇸 美股"}</button>)}
-<input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 篩選清單..." style={{flex:1,padding:"8px 14px",borderRadius:8,...glass(),color:C.t,fontSize:13,outline:"none"}}/>
-</div>
-<div style={glass({padding:0,overflow:"hidden"})}>
-<div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr .9fr .9fr .7fr .7fr 70px 110px",gap:8,padding:"9px 16px",borderBottom:"1px solid rgba(255,255,255,.06)",fontSize:10,color:C.m,fontWeight:700,letterSpacing:".08em"}}><div>公司</div><div>現價</div><div>漲跌</div><div>%</div><div>PE</div><div>毛利</div><div>趨勢</div><div></div></div>
-{(mTab==="tw"?fTW:fUS).map(s=><Row key={s.symbol} s={s} tw={mTab==="tw"} wl={wl} onW={sym=>setWl(w=>w.includes(sym)?w.filter(x=>x!==sym):[...w,sym])} onA={s=>{setSel(s);setSelTW(mTab==="tw"&&s.sector!=="美股")}} onRemove={extraStocks.find(x=>x.symbol===s.symbol)?removeExtra:null}/>)}
-</div>
-</div>}
-{tab==="sentiment"&&<div>
-<h1 style={{fontSize:26,fontWeight:800,color:"#e8f4f8",marginBottom:14}}>市場情緒儀表板</h1>
-<div style={{display:"flex",gap:8,marginBottom:18}}>{["tw","us"].map(m=><button key={m} onClick={()=>setSentTab(m)} style={{...glass({padding:"8px 20px"}),border:`1px solid ${sentTab===m?"rgba(52,211,153,.4)":"rgba(255,255,255,.06)"}`,color:sentTab===m?C.a:C.m,background:sentTab===m?"rgba(52,211,153,.1)":"rgba(5,14,32,.5)",cursor:"pointer",fontWeight:700,fontSize:13,borderRadius:10}}>{m==="tw"?"🇹🇼 台灣市場":"🇺🇸 美國市場"}</button>)}</div>
-{sentTab==="tw"&&<div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-<div style={glass({padding:24})}>
-<div style={{fontWeight:700,color:"#e8f4f8",marginBottom:16,fontSize:14}}>🤖 台股 AI 情緒指數</div>
-{twSentLoading?<div style={{textAlign:"center",padding:20}}><div style={{fontSize:28,animation:"spin 2s linear infinite",display:"inline-block",color:C.a}}>⟳</div><div style={{fontSize:12,color:C.m,marginTop:8}}>AI 分析中，約需 10 秒...</div></div>:twSent?<>
-<div style={{fontSize:60,fontWeight:800,color:sentColor(twSent.score),textShadow:`0 0 24px ${sentColor(twSent.score)}55`,fontFamily:"monospace",lineHeight:1}}>{twSent.score}</div>
-<div style={{fontSize:18,fontWeight:700,color:sentColor(twSent.score),marginTop:8}}>{twSent.label}</div>
-<div style={{fontSize:13,color:C.t,marginTop:10,lineHeight:1.7}}>{twSent.summary}</div>
-<button onClick={()=>{setTWSent(null);loadTWSentiment();}} style={{marginTop:14,padding:"6px 16px",borderRadius:8,border:"1px solid rgba(52,211,153,.3)",background:"rgba(52,211,153,.06)",color:C.a,cursor:"pointer",fontSize:12,fontWeight:600}}>🔄 重新分析</button>
-</>:<div style={{textAlign:"center",padding:"20px 0"}}>
-<div style={{fontSize:13,color:C.m,marginBottom:14}}>點擊按鈕讓 AI 根據今日台股行情<br/>生成情緒評分（0-100）</div>
-<button onClick={loadTWSentiment} style={{padding:"10px 24px",borderRadius:10,border:"1px solid rgba(52,211,153,.4)",background:"rgba(52,211,153,.1)",color:C.a,cursor:"pointer",fontSize:14,fontWeight:700}}>🤖 AI 分析台股情緒</button>
-</div>}
-</div>
-<div style={glass({padding:24})}>
-<div style={{fontWeight:700,color:"#e8f4f8",marginBottom:16,fontSize:14}}>📊 台灣市場即時指標</div>
-<div style={{display:"flex",flexDirection:"column",gap:10}}>
-{[["🏦 加權指數",i.twii?.price?`${i.twii.price.toLocaleString()} (${i.twii.pct>=0?"+":""}${(i.twii.pct||0).toFixed(2)}%)`:"—",i.twii?.pct>=0],["💱 台幣/美元",i.usdtwd?.price?`${i.usdtwd.price} (${(i.usdtwd.pct||0).toFixed(3)}%)`:"—",i.usdtwd?.pct<=0],["📉 VIX 波動率","16.8（低波動）",true],["🌏 日經225",i.nikkei?.price?i.nikkei.price.toLocaleString():"—",i.nikkei?.pct>=0],["🥇 黃金",i.gold?.price?`$${i.gold.price.toLocaleString()}`:"—",i.gold?.pct>=0]].map(([l,v,pos])=><div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,.04)"}}><span style={{fontSize:12,color:C.m}}>{l}</span><span style={{fontSize:13,fontWeight:700,color:pos?C.a:C.r,fontFamily:"monospace"}}>{v}</span></div>)}
-</div>
-</div>
-</div>
-{twSent?.observations&&<div style={glass({padding:20,marginBottom:16})}><div style={{fontWeight:700,color:"#e8f4f8",marginBottom:12,fontSize:14}}>🔍 AI 三大觀察</div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>{twSent.observations.map((o,idx)=><div key={idx} style={{background:"rgba(52,211,153,.05)",border:"1px solid rgba(52,211,153,.15)",borderRadius:10,padding:14}}><div style={{fontSize:11,color:C.a,marginBottom:4,fontWeight:700}}>觀察 {idx+1}</div><div style={{fontSize:13,color:C.t,lineHeight:1.6}}>{o}</div></div>)}</div></div>}
-<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
-{[["📈 台股漲跌",""+tw.filter(s=>s.pct>0).length+"漲 / "+tw.filter(s=>s.pct<0).length+"跌",tw.filter(s=>s.pct>0).length>=tw.filter(s=>s.pct<0).length],["🏆 今日強勢",(()=>{const b=tw.filter(s=>s.price>0).sort((a,b)=>b.pct-a.pct)[0];return b?`${b.name} +${b.pct.toFixed(2)}%`:"—"})(),true],["⚠️ 今日弱勢",(()=>{const w=tw.filter(s=>s.price>0).sort((a,b)=>a.pct-b.pct)[0];return w?`${w.name} ${w.pct.toFixed(2)}%`:"—"})(),false]].map(([t,v,pos])=><div key={t} style={glass({padding:18})}><div style={{fontSize:12,color:C.m,marginBottom:6}}>{t}</div><div style={{fontSize:15,fontWeight:800,color:pos?C.a:C.r,fontFamily:"monospace"}}>{v}</div></div>)}
-</div>
-</div>}
-{sentTab==="us"&&<div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-<div style={glass({padding:20})}><div style={{fontWeight:700,color:"#e8f4f8",marginBottom:14}}>😱 CNN 貪婪恐懼指數</div><div style={{fontSize:48,fontWeight:800,color:"#fbbf24",textShadow:"0 0 20px rgba(251,191,36,.4)"}}>62</div><div style={{fontSize:12,color:C.m,marginTop:4}}>偏貪婪 ｜ 0=極恐 100=極貪</div></div>
-<div style={glass({padding:20})}><div style={{fontWeight:700,color:"#e8f4f8",marginBottom:14}}>📉 VIX 波動率</div><div style={{fontSize:48,fontWeight:800,color:C.a,textShadow:"0 0 20px rgba(52,211,153,.35)"}}>16.8</div><div style={{fontSize:12,color:C.m,marginTop:4}}>低波動，市場平穩</div></div>
-</div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:16}}>{[["🏦 Fed 利率","5.25%","#fbbf24","預期年底降息 2 次，每次 25bps"],["📋 10年美債","4.58%","#f87171","高於 4.5%，股債競爭加劇"],["🔄 景氣循環","復甦期","#34d399","利好科技、金融板塊"]].map(([t,v,c,d])=><div key={t} style={glass({padding:18})}><div style={{fontWeight:700,color:"#e8f4f8",marginBottom:8,fontSize:13}}>{t}</div><div style={{fontSize:28,fontWeight:800,color:c,textShadow:`0 0 16px ${c}55`}}>{v}</div><div style={{fontSize:12,color:C.t,marginTop:8,lineHeight:1.7}}>{d}</div></div>)}</div>
-<div style={glass({padding:20})}><div style={{fontWeight:700,color:"#e8f4f8",marginBottom:14}}>📊 美股主要指數</div><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>{[["S&P500",i.sp500?.price?i.sp500.price.toLocaleString():"—",i.sp500?.pct>=0],["NASDAQ",i.nasdaq?.price?i.nasdaq.price.toLocaleString():"—",i.nasdaq?.pct>=0],["道瓊",i.dow?.price?i.dow.price.toLocaleString():"—",i.dow?.pct>=0],["費半",i.sox?.price?i.sox.price.toLocaleString():"—",i.sox?.pct>=0]].map(([l,v,pos])=><div key={l} style={{background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.06)",borderRadius:10,padding:14}}><div style={{fontSize:11,color:C.m,marginBottom:5}}>{l}</div><div style={{fontSize:18,fontWeight:800,color:pos?C.a:C.r,fontFamily:"monospace"}}>{v}</div></div>)}</div></div>
-</div>}
-</div>}
-{tab==="portfolio"&&<div><h1 style={{fontSize:26,fontWeight:800,color:"#e8f4f8",marginBottom:18}}>我的投資組合</h1><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:16}}>{[["總市值","$"+pv.toLocaleString("en-US",{maximumFractionDigits:0}),true],["未實現損益",(pnl>=0?"+":"")+"$"+pnl.toFixed(0),pnl>=0],["報酬率",(pp>=0?"+":"")+pp.toFixed(2)+"%",pp>=0],["持有標的","4 檔",true]].map(([l,v,pos])=><div key={l} style={{...glass(),borderLeft:`3px solid ${pos?C.a:C.r}`}}><div style={{fontSize:11,color:C.m,marginBottom:5,padding:"18px 18px 0"}}>{l}</div><div style={{fontSize:20,fontWeight:800,color:pos?C.a:C.r,padding:"0 18px 18px"}}>{v}</div></div>)}</div><div style={{...glass({padding:18}),marginBottom:16,borderLeft:`3px solid ${C.g}`}}><div style={{fontWeight:700,color:C.g,marginBottom:8}}>🛡️ 風險管理</div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,fontSize:12,color:C.t,lineHeight:1.7}}><div>📌 單一持股不超過 20%</div><div>🔻 成本價 -8~-10% 為停損</div><div>💵 保留 10-20% 現金</div></div></div><div style={glass({padding:0,overflow:"hidden"})}><div style={{display:"grid",gridTemplateColumns:"1.5fr .6fr .8fr 1fr 1fr 1fr 1fr 100px",gap:8,padding:"9px 16px",borderBottom:"1px solid rgba(255,255,255,.06)",fontSize:10,color:C.m,fontWeight:700}}><div>股票</div><div>市場</div><div>持股</div><div>成本</div><div>現價</div><div>市值</div><div>損益</div><div></div></div>{PORT.map(p=>{const s=all.find(x=>x.symbol===p.symbol);const mv=(s?.price||0)*p.shares,pl=((s?.price||0)-p.cost)*p.shares,pp2=s?.price?(s.price-p.cost)/p.cost*100:0,pos=pl>=0,cur=p.tw?"NT$":"$";return <div key={p.symbol} className="row" style={{display:"grid",gridTemplateColumns:"1.5fr .6fr .8fr 1fr 1fr 1fr 1fr 100px",gap:8,padding:"12px 16px",borderBottom:"1px solid rgba(255,255,255,.03)",alignItems:"center"}}><div><div style={{fontWeight:800,color:"#ddeeff"}}>{p.symbol}</div><div style={{fontSize:11,color:C.m}}>{s?.name}</div></div><div>{p.tw?"🇹🇼":"🇺🇸"}</div><div>{p.shares}股</div><div>{cur}{p.cost}</div><div style={{fontWeight:700,color:"#e8f4f8"}}>{s?.price?`${cur}${s.price.toLocaleString()}`:"—"}</div><div>{s?.price?`${cur}${mv.toLocaleString("en-US",{maximumFractionDigits:0})}`:"—"}</div><div><div style={{color:pos?C.a:C.r,fontWeight:700}}>{s?.price?(pos?"+":"")+cur+pl.toFixed(0):"—"}</div><div style={{fontSize:11,color:pos?C.a:C.r}}>{s?.price?(pos?"+":"")+pp2.toFixed(2)+"%":"—"}</div></div><button className="ai" onClick={()=>{setSel(s);setSelTW(p.tw)}}>🤖 AI</button></div>})}</div></div>}
-{tab==="news"&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}><div><h1 style={{fontSize:26,fontWeight:800,color:"#e8f4f8"}}>財經新聞</h1><p style={{color:C.a,fontSize:13,marginTop:4}}>🤖 AI 根據即時行情生成 · {newsT?newsT.toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei"})+" 更新":"生成中..."}</p></div><button onClick={fetchNews} style={{...glass({padding:"8px 18px"}),color:C.a,cursor:"pointer",fontSize:13,fontWeight:700,border:"1px solid rgba(52,211,153,.3)"}}>🔄 更新</button></div>{!news.length?<div style={{...glass({padding:60}),textAlign:"center",color:C.m}}><div style={{fontSize:32,animation:"spin 2s linear infinite",display:"inline-block",marginBottom:12}}>⟳</div><div>AI 正在生成財經新聞...</div></div>:<div style={{display:"flex",flexDirection:"column",gap:10}}>{news.map((n,i)=>{const pos=n.impact==="利多";return <div key={i} className="row" style={{...glass({padding:18}),borderLeft:`3px solid ${pos?C.a:C.r}`}}><div style={{display:"flex",gap:7,marginBottom:7,flexWrap:"wrap"}}><span style={{fontSize:11,background:"rgba(255,255,255,.05)",padding:"2px 7px",borderRadius:4,color:C.m}}>{n.tag}</span><span style={{fontSize:11,padding:"2px 7px",borderRadius:4,fontWeight:700,background:pos?"rgba(52,211,153,.1)":"rgba(248,113,113,.1)",color:pos?C.a:C.r}}>{n.impact}</span>{n.source&&<span style={{fontSize:10,color:"#1a3050"}}>— {n.source}</span>}</div><div style={{fontSize:14,fontWeight:600,color:"#ddeeff",lineHeight:1.55}}>{n.title}</div><div style={{fontSize:11,color:C.m,marginTop:6}}>🕐 {n.time} · 🤖 AI生成</div></div>})}</div>}</div>}
-</main>
-{sel&&<AIModal s={sel} tw={selTW} onClose={()=>setSel(null)}/>}
-</div>;}
+
+function marketStatus() {
+  const d = getTW();
+  const day = d.getDay();
+  const m = d.getHours() * 60 + d.getMinutes();
+
+  if (day === 0 || day === 6) {
+    return {
+      label: "週末休市",
+      color: "#64748b",
+    };
+  }
+
+  if (m >= 540 && m <= 810) {
+    return {
+      label: "🟢 台股交易中",
+      color: "#34d399",
+    };
+  }
+
+  if (m >= 1290 || m <= 240) {
+    return {
+      label: "🔵 美股交易中",
+      color: "#60a5fa",
+    };
+  }
+
+  return {
+    label: "休市",
+    color: "#64748b",
+  };
+}
+
+const TW_STOCKS = [
+  {
+    symbol: "2330",
+    name: "台積電",
+    sector: "半導體",
+    pe: 28.4,
+    grossMargin: "53%",
+  },
+  {
+    symbol: "2317",
+    name: "鴻海",
+    sector: "電子",
+    pe: 12.1,
+    grossMargin: "6.2%",
+  },
+  {
+    symbol: "2454",
+    name: "聯發科",
+    sector: "IC設計",
+    pe: 22.8,
+    grossMargin: "47%",
+  },
+  {
+    symbol: "2382",
+    name: "廣達",
+    sector: "AI伺服器",
+    pe: 18.5,
+    grossMargin: "5.8%",
+  },
+  {
+    symbol: "2308",
+    name: "台達電",
+    sector: "電源",
+    pe: 30.1,
+    grossMargin: "28%",
+  },
+].map((s) => ({
+  ...s,
+  price: 0,
+  change: 0,
+  pct: 0,
+}));
+
+const US_STOCKS = [
+  {
+    symbol: "AAPL",
+    name: "Apple",
+    sector: "科技",
+    pe: 29.4,
+    grossMargin: "46%",
+  },
+  {
+    symbol: "NVDA",
+    name: "NVIDIA",
+    sector: "AI晶片",
+    pe: 68.2,
+    grossMargin: "75%",
+  },
+  {
+    symbol: "TSLA",
+    name: "Tesla",
+    sector: "電動車",
+    pe: 52.3,
+    grossMargin: "18%",
+  },
+  {
+    symbol: "MSFT",
+    name: "Microsoft",
+    sector: "雲端",
+    pe: 35.1,
+    grossMargin: "70%",
+  },
+].map((s) => ({
+  ...s,
+  price: 0,
+  change: 0,
+  pct: 0,
+}));
+
+function StarBackground() {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+
+    resize();
+
+    window.addEventListener("resize", resize);
+
+    const stars = Array.from({ length: 180 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      r: Math.random() * 1.5 + 0.2,
+    }));
+
+    let frame;
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const bg = ctx.createLinearGradient(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      bg.addColorStop(0, "#020617");
+      bg.addColorStop(1, "#050816");
+
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      stars.forEach((s) => {
+        ctx.beginPath();
+
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+
+        ctx.arc(
+          s.x * canvas.width,
+          s.y * canvas.height,
+          s.r,
+          0,
+          Math.PI * 2
+        );
+
+        ctx.fill();
+      });
+
+      frame = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={ref}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
+function Sparkline({ positive }) {
+  const color = positive ? "#34d399" : "#f87171";
+
+  return (
+    <svg width="70" height="26" viewBox="0 0 100 100">
+      <polyline
+        points="0,60 20,45 40,55 60,30 80,40 100,20"
+        fill="none"
+        stroke={color}
+        strokeWidth="5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}function StockRow({ stock, tw, onAI }) {
+  const positive = stock.pct >= 0;
+  const color = positive ? "#34d399" : "#f87171";
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "2fr 1fr 1fr 1fr 80px 100px",
+        gap: 10,
+        padding: "14px 18px",
+        borderBottom: "1px solid rgba(255,255,255,.05)",
+        alignItems: "center",
+        background:
+          Math.abs(stock.pct) >= 5
+            ? positive
+              ? "rgba(52,211,153,.05)"
+              : "rgba(248,113,113,.05)"
+            : "transparent",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontWeight: 800,
+            color: "#e8f4f8",
+            fontSize: 14,
+          }}
+        >
+          {tw ? "🇹🇼" : "🇺🇸"} {stock.symbol}
+        </div>
+
+        <div
+          style={{
+            fontSize: 11,
+            color: "#6b8fad",
+            marginTop: 2,
+          }}
+        >
+          {stock.name} · {stock.sector}
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontWeight: 800,
+          color: "#fff",
+          fontFamily: "monospace",
+        }}
+      >
+        {stock.price > 0
+          ? `${tw ? "NT$" : "$"}${stock.price.toLocaleString()}`
+          : "載入中"}
+      </div>
+
+      <div
+        style={{
+          color,
+          fontWeight: 700,
+        }}
+      >
+        {stock.change > 0 ? "+" : ""}
+        {stock.change}
+      </div>
+
+      <div
+        style={{
+          color,
+          fontWeight: 700,
+        }}
+      >
+        {stock.pct > 0 ? "+" : ""}
+        {stock.pct.toFixed(2)}%
+      </div>
+
+      <Sparkline positive={positive} />
+
+      <button
+        onClick={() => onAI(stock)}
+        style={{
+          border: "1px solid rgba(52,211,153,.3)",
+          background: "rgba(52,211,153,.08)",
+          color: "#34d399",
+          padding: "8px 12px",
+          borderRadius: 10,
+          cursor: "pointer",
+          fontWeight: 700,
+        }}
+      >
+        🤖 AI
+      </button>
+    </div>
+  );
+}
+
+function AIModal({ stock, onClose }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.8)",
+        zIndex: 999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 700,
+          background:
+            "linear-gradient(135deg,#081120,#0f172a)",
+          borderRadius: 20,
+          border: "1px solid rgba(52,211,153,.2)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "20px 24px",
+            borderBottom:
+              "1px solid rgba(255,255,255,.06)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 800,
+                color: "#fff",
+              }}
+            >
+              🤖 {stock.symbol} AI 分析
+            </div>
+
+            <div
+              style={{
+                marginTop: 4,
+                color: "#6b8fad",
+                fontSize: 12,
+              }}
+            >
+              {stock.name}
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              border: "none",
+              background: "rgba(255,255,255,.06)",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div
+          style={{
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 14,
+              marginBottom: 18,
+            }}
+          >
+            {[
+              ["市場情緒", "偏多"],
+              ["技術面", "多頭排列"],
+              ["風險", "中等"],
+              ["策略", "可分批布局"],
+            ].map(([a, b]) => (
+              <div
+                key={a}
+                style={{
+                  background: "rgba(255,255,255,.03)",
+                  border:
+                    "1px solid rgba(255,255,255,.06)",
+                  borderRadius: 14,
+                  padding: 16,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#6b8fad",
+                    marginBottom: 6,
+                  }}
+                >
+                  {a}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 800,
+                    color: "#34d399",
+                  }}
+                >
+                  {b}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              background: "rgba(0,0,0,.35)",
+              border:
+                "1px solid rgba(52,211,153,.12)",
+              borderRadius: 16,
+              padding: 18,
+              lineHeight: 1.9,
+              color: "#bbd4e8",
+              fontSize: 14,
+            }}
+          >
+            AI 判斷目前 {stock.symbol} 整體趨勢仍偏強，
+            若後續成交量持續放大，
+            有機會延續多頭走勢。
+
+            短線需注意高檔震盪與消息面影響，
+            建議採取分批進場與風險控管策略。
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}export default function App() {
+  const [tab, setTab] = useState("market");
+  const [marketTab, setMarketTab] = useState("tw");
+  const [clock, setClock] = useState(twStr());
+  const [status, setStatus] = useState(marketStatus());
+  const [twStocks, setTwStocks] = useState(TW_STOCKS);
+  const [usStocks, setUsStocks] = useState(US_STOCKS);
+  const [selected, setSelected] = useState(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setClock(twStr());
+      setStatus(marketStatus());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const stocks = marketTab === "tw" ? twStocks : usStocks;
+
+  const filteredStocks = stocks.filter((s) => {
+    const q = query.toLowerCase();
+    return (
+      s.symbol.toLowerCase().includes(q) ||
+      s.name.toLowerCase().includes(q)
+    );
+  });
+
+  const updateDemoData = () => {
+    const randomize = (arr) =>
+      arr.map((s) => {
+        const base =
+          s.symbol === "2330"
+            ? 980
+            : s.symbol === "2317"
+            ? 180
+            : s.symbol === "2454"
+            ? 1280
+            : s.symbol === "2382"
+            ? 290
+            : s.symbol === "2308"
+            ? 360
+            : s.symbol === "NVDA"
+            ? 920
+            : s.symbol === "TSLA"
+            ? 180
+            : s.symbol === "MSFT"
+            ? 420
+            : s.symbol === "AAPL"
+            ? 190
+            : 100;
+
+        const pct = Math.round((Math.random() * 6 - 3) * 100) / 100;
+        const price = Math.round(base * (1 + pct / 100) * 100) / 100;
+        const change = Math.round((price - base) * 100) / 100;
+
+        return {
+          ...s,
+          price,
+          change,
+          pct,
+        };
+      });
+
+    setTwStocks(randomize(TW_STOCKS));
+    setUsStocks(randomize(US_STOCKS));
+  };
+
+  useEffect(() => {
+    updateDemoData();
+  }, []);
+
+  const cardStyle = {
+    background: "rgba(5,14,32,.75)",
+    border: "1px solid rgba(255,255,255,.07)",
+    borderRadius: 18,
+    backdropFilter: "blur(16px)",
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        color: "#bbd4e8",
+        fontFamily: "-apple-system,BlinkMacSystemFont,sans-serif",
+        position: "relative",
+      }}
+    >
+      <style>
+        {`
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+          }
+
+          button {
+            font-family: inherit;
+          }
+
+          @keyframes fadeUp {
+            from {
+              opacity: 0;
+              transform: translateY(14px);
+            }
+
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @media (max-width: 768px) {
+            .hero-grid {
+              grid-template-columns: 1fr !important;
+            }
+
+            .market-grid {
+              grid-template-columns: 1fr 1fr !important;
+            }
+
+            .stock-table {
+              overflow-x: auto;
+            }
+
+            .stock-row {
+              min-width: 760px;
+            }
+
+            .top-nav {
+              overflow-x: auto;
+            }
+          }
+        `}
+      </style>
+
+      <StarBackground />
+
+      <header
+        style={{
+          ...cardStyle,
+          borderRadius: 0,
+          height: 60,
+          padding: "0 18px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          borderLeft: "none",
+          borderRight: "none",
+          borderTop: "none",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 18,
+            fontWeight: 900,
+            color: "#34d399",
+          }}
+        >
+          ▲ StockAI Pro
+        </div>
+
+        <nav
+          className="top-nav"
+          style={{
+            display: "flex",
+            gap: 6,
+          }}
+        >
+          {[
+            ["market", "行情"],
+            ["sentiment", "情緒"],
+            ["news", "新聞"],
+            ["pro", "訂閱"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 10,
+                border: "none",
+                cursor: "pointer",
+                fontWeight: 700,
+                background:
+                  tab === key
+                    ? "rgba(52,211,153,.14)"
+                    : "transparent",
+                color: tab === key ? "#34d399" : "#6b8fad",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <div
+            style={{
+              color: status.color,
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {status.label}
+          </div>
+
+          <div
+            style={{
+              fontSize: 10,
+              color: "#36536f",
+              fontFamily: "monospace",
+            }}
+          >
+            {clock}
+          </div>
+        </div>
+      </header>
+
+      <main
+        style={{
+          position: "relative",
+          zIndex: 1,
+          maxWidth: 1180,
+          margin: "0 auto",
+          padding: "24px 18px 60px",
+          animation: "fadeUp .4s ease",
+        }}
+      >
+        {tab === "market" && (
+          <>
+            <section
+              className="hero-grid"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.2fr .8fr",
+                gap: 18,
+                marginBottom: 20,
+              }}
+            >
+              <div
+                style={{
+                  ...cardStyle,
+                  padding: 26,
+                  background:
+                    "linear-gradient(135deg,rgba(5,14,32,.92),rgba(2,8,20,.72))",
+                  border: "1px solid rgba(52,211,153,.16)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-block",
+                    padding: "5px 12px",
+                    borderRadius: 999,
+                    background: "rgba(52,211,153,.1)",
+                    color: "#34d399",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    marginBottom: 14,
+                  }}
+                >
+                  AI 股票分析平台
+                </div>
+
+                <h1
+                  style={{
+                    fontSize: 38,
+                    lineHeight: 1.22,
+                    color: "#e8f4f8",
+                    margin: "0 0 12px",
+                    fontWeight: 950,
+                  }}
+                >
+                  用 AI 幫你整理
+                  <br />
+                  台股、美股的投資訊號
+                </h1>
+
+                <p
+                  style={{
+                    color: "#6b8fad",
+                    fontSize: 15,
+                    lineHeight: 1.8,
+                    marginBottom: 20,
+                  }}
+                >
+                  即時行情、新聞摘要、技術面、基本面、風險評估與多空判斷，一次整理給你。
+                  打開網站就能快速掌握市場重點。
+                </p>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    onClick={() => setTab("market")}
+                    style={{
+                      padding: "11px 18px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(52,211,153,.45)",
+                      background: "rgba(52,211,153,.14)",
+                      color: "#34d399",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    🔍 開始分析股票
+                  </button>
+
+                  <button
+                    onClick={() => setTab("sentiment")}
+                    style={{
+                      padding: "11px 18px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(96,165,250,.35)",
+                      background: "rgba(96,165,250,.1)",
+                      color: "#60a5fa",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    📊 查看市場情緒
+                  </button>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  ...cardStyle,
+                  padding: 22,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#6b8fad",
+                    marginBottom: 8,
+                  }}
+                >
+                  今日 AI 市場雷達
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 900,
+                    color: "#fff",
+                    marginBottom: 16,
+                  }}
+                >
+                  熱門觀察
+                </div>
+
+                {[
+                  ["2330 台積電", "AI 需求仍是主軸", "+2.18%"],
+                  ["NVDA 輝達", "資金動能強", "+1.45%"],
+                  ["TSLA 特斯拉", "短線震盪", "-0.82%"],
+                ].map(([name, text, pct]) => {
+                  const positive = pct.startsWith("+");
+
+                  return (
+                    <div
+                      key={name}
+                      style={{
+                        background: "rgba(0,0,0,.28)",
+                        border: "1px solid rgba(255,255,255,.06)",
+                        borderRadius: 14,
+                        padding: 14,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <strong style={{ color: "#e8f4f8" }}>
+                          {name}
+                        </strong>
+
+                        <span
+                          style={{
+                            color: positive ? "#34d399" : "#f87171",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {pct}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          color: "#6b8fad",
+                          fontSize: 12,
+                        }}
+                      >
+                        {text}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section
+              className="market-grid"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4,1fr)",
+                gap: 12,
+                marginBottom: 18,
+              }}
+            >
+              {[
+                ["AI 分析", "8項維度", "#34d399"],
+                ["台股追蹤", "熱門標的", "#60a5fa"],
+                ["美股分析", "科技龍頭", "#fbbf24"],
+                ["風險控管", "停損提醒", "#f87171"],
+              ].map(([a, b, c]) => (
+                <div
+                  key={a}
+                  style={{
+                    ...cardStyle,
+                    padding: 18,
+                    borderLeft: `3px solid ${c}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#6b8fad",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {a}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 20,
+                      color: c,
+                      fontWeight: 900,
+                    }}
+                  >
+                    {b}
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            <section
+              style={{
+                ...cardStyle,
+                padding: 16,
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  marginBottom: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  onClick={() => setMarketTab("tw")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(52,211,153,.3)",
+                    background:
+                      marketTab === "tw"
+                        ? "rgba(52,211,153,.12)"
+                        : "transparent",
+                    color:
+                      marketTab === "tw" ? "#34d399" : "#6b8fad",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  🇹🇼 台股
+                </button>
+
+                <button
+                  onClick={() => setMarketTab("us")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(96,165,250,.3)",
+                    background:
+                      marketTab === "us"
+                        ? "rgba(96,165,250,.12)"
+                        : "transparent",
+                    color:
+                      marketTab === "us" ? "#60a5fa" : "#6b8fad",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  🇺🇸 美股
+                </button>
+
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="搜尋股票代號或名稱..."
+                  style={{
+                    flex: 1,
+                    minWidth: 180,
+                    padding: "9px 14px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,.08)",
+                    background: "rgba(0,0,0,.28)",
+                    color: "#fff",
+                    outline: "none",
+                  }}
+                />
+
+                <button
+                  onClick={updateDemoData}
+                  style={{
+                    padding: "9px 16px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(52,211,153,.3)",
+                    background: "rgba(52,211,153,.08)",
+                    color: "#34d399",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  🔄 更新行情
+                </button>
+              </div>
+
+              <div className="stock-table">
+                <div
+                  className="stock-row"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "2fr 1fr 1fr 1fr 80px 100px",
+                    gap: 10,
+                    padding: "10px 18px",
+                    color: "#6b8fad",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    borderBottom: "1px solid rgba(255,255,255,.06)",
+                  }}
+                >
+                  <div>公司</div>
+                  <div>現價</div>
+                  <div>漲跌</div>
+                  <div>%</div>
+                  <div>趨勢</div>
+                  <div></div>
+                </div>
+
+                {filteredStocks.map((stock) => (
+                  <div className="stock-row" key={stock.symbol}>
+                    <StockRow
+                      stock={stock}
+                      tw={marketTab === "tw"}
+                      onAI={setSelected}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+
+        {tab === "sentiment" && (
+          <section style={{ ...cardStyle, padding: 24 }}>
+            <h1 style={{ color: "#fff", marginTop: 0 }}>
+              市場情緒儀表板
+            </h1>
+
+            <p style={{ color: "#6b8fad", lineHeight: 1.8 }}>
+              這裡之後可以接上 CNN Fear & Greed、VIX、台股加權指數、
+              匯率與 AI 情緒評分。
+            </p>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3,1fr)",
+                gap: 14,
+                marginTop: 18,
+              }}
+            >
+              {[
+                ["市場情緒", "偏貪婪", "#fbbf24"],
+                ["VIX 波動", "低波動", "#34d399"],
+                ["AI 判斷", "短線偏多", "#60a5fa"],
+              ].map(([a, b, c]) => (
+                <div
+                  key={a}
+                  style={{
+                    background: "rgba(255,255,255,.03)",
+                    border: "1px solid rgba(255,255,255,.06)",
+                    borderRadius: 14,
+                    padding: 18,
+                  }}
+                >
+                  <div style={{ color: "#6b8fad", fontSize: 12 }}>
+                    {a}
+                  </div>
+
+                  <div
+                    style={{
+                      color: c,
+                      fontSize: 24,
+                      fontWeight: 900,
+                      marginTop: 8,
+                    }}
+                  >
+                    {b}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tab === "news" && (
+          <section style={{ ...cardStyle, padding: 24 }}>
+            <h1 style={{ color: "#fff", marginTop: 0 }}>
+              今日 AI 財經新聞
+            </h1>
+
+            {[
+              ["AI 概念股仍是市場焦點", "利多"],
+              ["美債殖利率變化影響科技股估值", "觀察"],
+              ["台股短線留意高檔震盪", "中性"],
+            ].map(([title, tag]) => (
+              <div
+                key={title}
+                style={{
+                  padding: 16,
+                  borderRadius: 14,
+                  background: "rgba(0,0,0,.25)",
+                  border: "1px solid rgba(255,255,255,.06)",
+                  marginBottom: 12,
+                }}
+              >
+                <div
+                  style={{
+                    color:
+                      tag === "利多"
+                        ? "#34d399"
+                        : tag === "中性"
+                        ? "#60a5fa"
+                        : "#fbbf24",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    marginBottom: 6,
+                  }}
+                >
+                  {tag}
+                </div>
+
+                <div style={{ color: "#e8f4f8", fontWeight: 800 }}>
+                  {title}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {tab === "pro" && (
+          <section style={{ ...cardStyle, padding: 24 }}>
+            <h1 style={{ color: "#fff", marginTop: 0 }}>
+              StockAI Pro 訂閱方案
+            </h1>
+
+            <p style={{ color: "#6b8fad", lineHeight: 1.8 }}>
+              之後可以做成免費版每日 3 次分析，Pro 版開放無限 AI 分析、
+              即時新聞、收藏清單與通知功能。
+            </p>
+
+            <div
+              style={{
+                marginTop: 18,
+                padding: 20,
+                borderRadius: 16,
+                background: "rgba(52,211,153,.08)",
+                border: "1px solid rgba(52,211,153,.2)",
+              }}
+            >
+              <div style={{ color: "#34d399", fontWeight: 900 }}>
+                Pro 月費建議
+              </div>
+
+              <div
+                style={{
+                  color: "#fff",
+                  fontSize: 34,
+                  fontWeight: 950,
+                  marginTop: 8,
+                }}
+              >
+                NT$199 / 月
+              </div>
+
+              <div style={{ color: "#6b8fad", marginTop: 8 }}>
+                適合先測市場接受度。
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      {selected && (
+        <AIModal stock={selected} onClose={() => setSelected(null)} />
+      )}
+    </div>
+  );
+}
