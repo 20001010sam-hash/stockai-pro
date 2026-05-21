@@ -6,6 +6,7 @@ module.exports = async (req, res) => {
 
   try {
     const { type, symbol } = req.query;
+    const FKEY = process.env.FINNHUB_API_KEY;
 
     if (type === 'tw') {
       const r = await fetch('https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw|tse_2317.tw|tse_2454.tw|tse_2382.tw|tse_2308.tw|tse_2412.tw|tse_2881.tw|tse_3008.tw|tse_6669.tw|tse_2376.tw&json=1&delay=0', {
@@ -37,10 +38,35 @@ module.exports = async (req, res) => {
       return res.status(200).json({ msgArray: [], error: 'not found' });
     }
 
+    if (type === 'us' && symbol) {
+      if (!FKEY) return res.status(500).json({error:'No Finnhub key'});
+      const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FKEY}`);
+      const d = await r.json();
+      return res.status(200).json(d);
+    }
+
+    if (type === 'us_batch') {
+      if (!FKEY) return res.status(500).json({error:'No Finnhub key'});
+      const syms = ['AAPL','MSFT','NVDA','TSLA','AMZN','GOOG','META','F','NOK','PLUG'];
+      const results = {};
+      await Promise.all(syms.map(async s => {
+        try {
+          const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${s}&token=${FKEY}`);
+          const d = await r.json();
+          if (d.c) results[s] = {
+            price: Math.round(d.c * 100) / 100,
+            change: Math.round(d.d * 100) / 100,
+            pct: Math.round(d.dp * 100) / 100
+          };
+        } catch {}
+      }));
+      return res.status(200).json(results);
+    }
+
     if (type === 'indices') {
       const syms = [
         ['^SPX','sp500'],['^NDX','nasdaq'],['^DJI','dow'],
-        ['^SOX','sox'],['^NKX','nikkei'],['USDTWD=X','usdtwd'],['GC=F','gold']
+        ['^SOX','sox'],['^N225','nikkei'],['USDTWD=X','usdtwd'],['GC=F','gold']
       ];
       const results = {};
       await Promise.all(syms.map(async ([s, key]) => {
