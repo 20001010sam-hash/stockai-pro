@@ -1,6 +1,6 @@
-const fetch = require('node-fetch');
+export const config = { api: { bodyParser: true } };
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -11,17 +11,17 @@ module.exports = async function handler(req, res) {
       'x-api-key': process.env.ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01',
     };
-    if (req.body && req.body.tools) {
+    if (req.body?.tools?.some(t => t.type === 'web_search_20250305')) {
       headers['anthropic-beta'] = 'web-search-2025-03-05';
     }
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers,
       body: JSON.stringify(req.body)
     });
-    const data = await response.json();
-    res.status(response.status).json(data);
+    const data = await r.json();
+    return res.status(r.status).json(data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: e.message });
   }
-};
+}
